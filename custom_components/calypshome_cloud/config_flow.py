@@ -1,11 +1,13 @@
+import logging
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 
-from .const import DOMAIN, CONF_LOGIN, CONF_PASSWORD, LOGGER
+from .const import DOMAIN, CONF_LOGIN, CONF_PASSWORD
 
+LOGGER = logging.getLogger(__name__)
 STEP_USER_DATA_SCHEMA = vol.Schema(
     {
         vol.Required(CONF_LOGIN): str,
@@ -32,7 +34,7 @@ async def validate_input(hass: HomeAssistant, data: dict) -> dict[str, str]:
         LOGGER.error("Erreur lors de la connexion à Calyps'HOME: %s", err)
         raise
 
-    return {"title": f"Calyps'HOME"}
+    return {"title": f"Calyps'HOME ({data[CONF_LOGIN]})"}
 
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):

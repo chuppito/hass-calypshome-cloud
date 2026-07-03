@@ -1,18 +1,32 @@
 import re
 import base64
 import asyncio
+import logging
 import websockets
 from typing import TYPE_CHECKING
 from collections.abc import Awaitable, Callable
 
-from .const import LOGGER
+from homeassistant.util.ssl import client_context
 
 if TYPE_CHECKING:
     from .api import CalypsHomeAPI
 
+LOGGER = logging.getLogger(__name__)
+
 class CalypsHomeWebSocket:
     
     WS_EVENT_RE = re.compile(r"^event/io/ezsp/(?P<real_name>.+)/(?P<field>level)$")
+    
+    @property
+    def on_update(self) -> Callable[[dict | None], Awaitable[None]] | None:
+        """Getter pour le callback de mise à jour"""
+        return self._on_update
+    
+    @on_update.setter
+    def on_update(self, value: Callable[[dict | None], Awaitable[None]] | None):
+        """Setter pour le callback de mise à jour"""
+        self._on_update = value
+    
     
     def __init__(self, api: CalypsHomeAPI, on_update: Callable[[dict | None], Awaitable[None]] | None = None):
         """        
@@ -24,11 +38,6 @@ class CalypsHomeWebSocket:
         self._on_update = on_update
         self._ws_task = None
         self._ws_connected = False
-
-
-    def set_on_update(self, on_update: Callable[[dict | None], Awaitable[None]] | None) -> None:
-        """Met à jour le callback asynchrone appelé sur les messages reconnus."""
-        self._on_update = on_update
         
     
     def _decode_ws_event_path(self, encoded_path: str) -> str | None:
@@ -88,7 +97,13 @@ class CalypsHomeWebSocket:
             try:
                 # Connexion au websocket
                 LOGGER.debug("Connexion au websocket: %s", ws_url)
-                async with websockets.connect(ws_url, ping_interval=30, subprotocols=["lws-mirror-protocol"]) as ws:
+                
+                async with websockets.connect(
+                    ws_url, 
+                    ping_interval=30, 
+                    subprotocols=["lws-mirror-protocol"],
+                    ssl=client_context()
+                ) as ws:
                     self._ws_connected = True
                     LOGGER.info("Websocket connecté")
                     

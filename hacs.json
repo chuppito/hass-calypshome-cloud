@@ -1,5 +1,5 @@
 {
-  "name": "Calyps'HOME",
+  "name": "Calyps'HOME Cloud",
   "render_readme": true,
   "domains": ["calypshome_cloud"],
   "iot_class": "cloud_polling",

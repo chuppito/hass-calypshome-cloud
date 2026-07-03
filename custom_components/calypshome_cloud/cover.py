@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from homeassistant.core import HomeAssistant
@@ -7,7 +8,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.components.cover import ATTR_POSITION, CoverDeviceClass, CoverEntity, CoverEntityFeature
 
 from .api import CalypsHomeAPI
-from .const import DOMAIN, LOGGER
+from .const import DOMAIN
+
+LOGGER = logging.getLogger(__name__)
 
 def _is_shutter_object(obj: dict) -> bool:
     """Vérifie si un objet est un volet roulant basé sur son type ou sa classe
@@ -22,7 +25,7 @@ def _is_shutter_object(obj: dict) -> bool:
     if object_type == "shutter":
         return True
 
-    class_name = str(obj.get("className", "")).lower()
+    class_name = str(obj.get("class_name", "")).lower()
     return any(token in class_name for token in ("shutter", "blind", "volet"))
 
 

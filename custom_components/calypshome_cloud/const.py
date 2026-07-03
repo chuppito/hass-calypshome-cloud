@@ -1,5 +1,3 @@
-import logging
-
 DOMAIN = "calypshome_cloud"
 
 # Configuration
@@ -11,4 +9,4 @@ DEFAULT_NAME = "Calyps'HOME Cloud"
 DEFAULT_CLOUD_URL = "https://calypshome.avidsen.one"
 
 PLATFORMS = ["cover"]
-LOGGER = logging.getLogger(__name__)
+UPDATE_INTERVAL = 5  # Intervalle de mise à jour en minutes

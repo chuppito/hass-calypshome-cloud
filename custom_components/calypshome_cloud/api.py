@@ -1,12 +1,14 @@
+import logging
 import urllib3
 import requests
 import threading
-from requests.adapters import HTTPAdapter
 from collections.abc import Awaitable, Callable
 
-from .const import DEFAULT_CLOUD_URL, LOGGER
+from .const import DEFAULT_CLOUD_URL
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+LOGGER = logging.getLogger(__name__)
 
 class CalypsHomeAPI:
     """Client API pour Calyps'HOME cloud"""
@@ -34,14 +36,12 @@ class CalypsHomeAPI:
         self.email = email
         self.password = password
         self._token = None
-        self._request_lock = threading.Lock()
+        self._request_lock = threading.RLock()
         self.on_update: Callable[[dict | None], Awaitable[None]] | None = None
         self._ws_client = None
 
-        # Initialisation de la session HTTP avec un pool de connexions
+        # Session standard, sans pool persistant forcé
         self.session = requests.Session()
-        adapter = HTTPAdapter(pool_connections=20, pool_maxsize=20)
-        self.session.mount("https://", adapter)
         self.session.headers["Accept"] = "application/json"
 
 
@@ -59,8 +59,8 @@ class CalypsHomeAPI:
             return {
                 "id": object["id"],
                 "name": object["name"],
-                "className": object["className"],
-                "realName": object["realName"],
+                "class_name": object["className"],
+                "real_name": object["realName"],
                 "statuses": object.get("statuses", [])
             }
         except (ValueError, KeyError) as e:
@@ -85,9 +85,13 @@ class CalypsHomeAPI:
         if not self.token and not self.login():
             return None
 
-        # Envoie la requête avec verrouillage pour éviter les conflits de session
-        with self._request_lock:
-            response = self.session.request(method, url, **kwargs)
+        try:
+            # Envoie la requête avec verrouillage pour éviter les conflits de session
+            with self._request_lock:
+                response = self.session.request(method, url, timeout=10, **kwargs)
+        except requests.exceptions.RequestException as e:
+            LOGGER.error("Erreur réseau lors de la requête HTTP : %s", e)
+            return None
 
         # Si le token est expiré ou invalide, réessaye après réauthentification
         if response.status_code in (400, 401, 403):
@@ -96,8 +100,12 @@ class CalypsHomeAPI:
             if not self.login():
                 return None
 
-            with self._request_lock:
-                response = self.session.request(method, url, **kwargs)
+            try:
+                with self._request_lock:
+                    response = self.session.request(method, url, timeout=10, **kwargs)
+            except requests.exceptions.RequestException as e:
+                LOGGER.error("Erreur HTTP lors de la tentative après réauthentification : %s", e)
+                return None
 
         return response
 
@@ -148,26 +156,30 @@ class CalypsHomeAPI:
         Returns:
             `True` si l'authentification est réussie, sinon `False`
         """
-        if self.token:
-            return True
-        
-        try:
-            # Requête d'authentification pour obtenir un token
-            response = self.session.post(url=f"{self.base_url}/services/dain/login", json={"login": self.email, "password": self.password})
-            response.raise_for_status()
-            token = response.json()["token"]
-
-            # Récupération du token dans la réponse
-            if token:
-                self.token = token
-                LOGGER.debug("Authentification cloud réussie pour %s", self.email)
+        # On verrouille pour qu'un seul thread à la fois puisse tenter de se connecter
+        with self._request_lock:
+            if self.token:
                 return True
 
-            LOGGER.error("Connexion cloud réussie mais aucun token retourné")
-            return False
-        except requests.exceptions.RequestException as e:
-            LOGGER.error("Erreur lors de l'authentification auprès de l'API cloud: %s", e)
-            return False
+            try:
+                response = self.session.post(
+                    url=f"{self.base_url}/services/dain/login", 
+                    json={"login": self.email, "password": self.password}, 
+                    timeout=10
+                )
+                response.raise_for_status()
+                token = response.json().get("token")
+
+                if token:
+                    self.token = token
+                    LOGGER.debug("Authentification cloud réussie pour %s", self.email)
+                    return True
+
+                LOGGER.error("Connexion cloud réussie mais aucun token retourné")
+                return False
+            except requests.exceptions.RequestException as e:
+                LOGGER.error("Erreur lors de l'authentification auprès de l'API cloud: %s", e)
+                return False
 
 
     def get_objects(self) -> list | None:
@@ -192,84 +204,31 @@ class CalypsHomeAPI:
             return None
 
 
-    def get_object(self, device_id: str) -> dict | None:
-        """Récupère l'état actuel d'un objet unique
-        
-        Args:
-            device_id: ID de l'objet
-        
-        Returns:
-            L'objet si succès, sinon `None`
-        """
-        # Envoie la requête pour récupérer l'objet
-        try:
-            response = self._send_calypshome_request("GET", f"/services/durin/my/objects/{device_id}")
-            if response is None:
-                return None
-
-            response.raise_for_status()
-            object = self._extract_object_from_response(response.json())
-            return object
-        except requests.exceptions.RequestException as e:
-            LOGGER.error("Erreur lors de la récupération de l'objet %s: %s", device_id, e)
-            return None
-
-
     def open_shutter(self, device_id: str) -> bool:
-        """Ouvre un volet
-        
-        Args:
-            device_id: ID de l'objet
-            
-        Returns:
-            `True` si succès, sinon `False`
-        """
+        """Ouvre un volet"""
         return self._send_action(device_id, "OPEN")
 
     def close_shutter(self, device_id: str) -> bool:
-        """Ferme un volet
-            
-        Args:
-            device_id: ID de l'objet
-            
-        Returns:
-            `True` si succès, sinon `False`
-        """
+        """Ferme un volet"""
         return self._send_action(device_id, "CLOSE")
 
     def stop_shutter(self, device_id: str) -> bool:
-        """Arrête un volet
-            
-        Args:
-            device_id: ID de l'objet
-            
-        Returns:
-            `True` si succès, sinon `False`
-        """
+        """Arrête un volet"""
         return self._send_action(device_id, "STOP")
 
     def set_level(self, device_id: str, level: int) -> bool:
-        """Définit le niveau d'ouverture du volet (0-100)
-            
-        Args:
-            device_id: ID de l'objet
-            level: Niveau d'ouverture (0-100)
-            
-        Returns:
-            `True` si succès, sinon `False`
-        """
+        """Définit le niveau d'ouverture du volet"""
         return self._send_action(device_id, "LEVEL", {"level": level})
 
 
     async def start_websocket(self) -> None:
         """Démarre l'écoute websocket pour les mises à jour en temps réel"""
         if self._ws_client is None:
-            # Import local pour éviter les imports circulaires au chargement du module.
+            # Import local pour éviter les imports circulaires au chargement du module
             from .websocket import CalypsHomeWebSocket
-
             self._ws_client = CalypsHomeWebSocket(self, self.on_update)
         else:
-            self._ws_client.set_on_update(self.on_update)
+            self._ws_client.on_update = self.on_update
 
         await self._ws_client.start_websocket()
 

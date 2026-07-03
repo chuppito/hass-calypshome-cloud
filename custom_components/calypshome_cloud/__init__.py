@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 
 from homeassistant.core import HomeAssistant
@@ -6,8 +7,9 @@ from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import CalypsHomeAPI
-from .const import DOMAIN, CONF_LOGIN, CONF_PASSWORD, LOGGER, PLATFORMS
+from .const import DOMAIN, CONF_LOGIN, CONF_PASSWORD, PLATFORMS, UPDATE_INTERVAL
 
+LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Configurer Calyps'HOME à partir d'une entrée config"""
@@ -24,10 +26,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         except Exception as err:
             raise UpdateFailed(f"Impossible de mettre à jour les données Calyps'HOME: {err}") from err
 
-    coordinator = DataUpdateCoordinator(hass, LOGGER, name=f"{DOMAIN}_{entry.entry_id}", update_method=_async_update_data, update_interval=timedelta(seconds=15))
+    coordinator = DataUpdateCoordinator(hass, LOGGER, name=f"{DOMAIN}_{entry.entry_id}", update_method=_async_update_data, update_interval=timedelta(minutes=UPDATE_INTERVAL))
 
-    # Configurer le callback websocket pour mettre à jour uniquement le volet concerné.
     async def on_ws_update(ws_update=None):
+        """Configure le callback websocket pour mettre à jour uniquement le volet concerné"""
         # Récupération des données du mise à jour du websocket
         if not ws_update:
             return
@@ -47,7 +49,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Parcourt les objets pour trouver celui correspondant au real_name et mettre à jour son niveau
         for obj in objects:
-            if obj.get("realName") != real_name:
+            if obj.get("real_name") != real_name:
                 next_objects.append(obj)
                 continue
 
@@ -84,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise ConfigEntryNotReady("Impossible de récupérer les objets de Calyps'HOME")
     except Exception as err:
         LOGGER.error("Erreur lors de la configuration de Calyps'HOME: %s", err)
-        raise ConfigEntryNotReady from err
+        return False
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
