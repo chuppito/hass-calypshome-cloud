@@ -1,7 +1,7 @@
 {
   "domain": "calypshome_cloud",
   "name": "Calyps'HOME Cloud",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "documentation": "https://github.com/Legobis965/hass-calypshome-cloud",
   "requirements": ["requests>=2.31.0", "websockets>=12.0"],
   "codeowners": ["@legobis"],

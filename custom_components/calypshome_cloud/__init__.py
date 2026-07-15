@@ -32,7 +32,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     async def on_ws_update(ws_update=None) -> None:
         """Callback appelé lorsqu'une mise à jour est reçue via le websocket"""
         # Vérifie que la mise à jour contient les informations nécessaires
-        if not ws_update or not (real_name := ws_update.get("real_name")) or (level_value := ws_update.get("value")) is None or not coordinator.data:
+        if (
+            not ws_update
+            or not (real_name := ws_update.get("real_name"))
+            or not (field := ws_update.get("field"))
+            or (field_value := ws_update.get("value")) is None
+            or not coordinator.data
+        ):
             return
 
         updated = False
@@ -44,13 +50,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 obj: CalypsHomeObject = copy.copy(obj)
                 statuses = list(obj.statuses)
 
-                # Met à jour le statut "level" si présent, sinon l'ajoute
-                if status := next((s for s in statuses if isinstance(s, dict) and s.get("name") == "level"), None):
+                # Met à jour le statut concerné (level, temperature, illuminance, ...) si présent, sinon l'ajoute
+                if status := next((s for s in statuses if isinstance(s, dict) and s.get("name") == field), None):
                     status = dict(status)
-                    status["value"] = level_value
-                    statuses = [status if s.get("name") == "level" else s for s in statuses]
+                    status["value"] = field_value
+                    statuses = [status if s.get("name") == field else s for s in statuses]
                 else:
-                    statuses = statuses + [{"name": "level", "value": level_value}]
+                    statuses = statuses + [{"name": field, "value": field_value}]
 
                 obj.statuses = statuses
                 updated = True

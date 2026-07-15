@@ -15,7 +15,7 @@ LOGGER = logging.getLogger(__name__)
 
 class CalypsHomeWebSocket:
     
-    WS_EVENT_RE = re.compile(r"^event/io/ezsp/(?P<real_name>.+)/(?P<field>level)$")
+    WS_EVENT_RE = re.compile(r"^event/io/ezsp/(?P<real_name>.+)/(?P<field>[^/]+)$")
     
     @property
     def on_update(self) -> Callable[[dict | None], Awaitable[None]] | None:
@@ -83,9 +83,16 @@ class CalypsHomeWebSocket:
         if not match:
             return None
 
+        # Extrait la valeur, en la décodant si elle est elle aussi encodée en base64 (préfixe @)
+        raw_value = parts[encoded_index + 1]
+        value = self._decode_ws_event_path(raw_value) if raw_value.startswith("@") else raw_value
+        if value is None:
+            return None
+
         return {
             "real_name": match.group("real_name"),
-            "value": parts[encoded_index + 1]
+            "field": match.group("field"),
+            "value": value
         }
 
 

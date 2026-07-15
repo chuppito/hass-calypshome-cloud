@@ -27,9 +27,10 @@ Merci à l'auteur original pour le travail de base et les idées initiales.
 ## Fonctionnalités
 
 - ✅ Découverte automatique de tous les volets roulants
+- ✅ Découverte automatique des sondes (température et luminosité)
 - ✅ Ouverture / Fermeture / Arrêt
 - ✅ Positionnement précis (0-100%)
-- ✅ Mise à jour du niveau en temps réel via WebSocket
+- ✅ Mise à jour en temps réel via WebSocket (volets, température, luminosité)
 - ✅ Configuration via l'interface utilisateur
 - ✅ Compatible avec toutes les automatisations Home Assistant
 - ✅ Fonctionne depuis n'importe quel réseau (cloud)

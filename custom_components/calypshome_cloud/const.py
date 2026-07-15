@@ -8,5 +8,5 @@ CONF_PASSWORD = "password"
 DEFAULT_NAME = "Calyps'HOME Cloud"
 DEFAULT_CLOUD_URL = "https://calypshome.avidsen.one"
 
-PLATFORMS = ["cover"]
+PLATFORMS = ["cover", "sensor"]
 UPDATE_INTERVAL = 5  # Intervalle de mise à jour en minutes
