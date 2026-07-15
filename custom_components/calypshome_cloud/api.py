@@ -10,6 +10,25 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 LOGGER = logging.getLogger(__name__)
 
+class CalypsHomeObject:
+    """Représentation d'un objet Calyps'HOME"""
+    
+    def __init__(self, id: int, name: str, class_name: str, real_name: str, statuses: list):
+        """       
+        Args:
+            id (int): Identifiant unique de l'objet
+            name (str): Nom convivial de l'objet
+            class_name (str): Nom de la classe de l'objet
+            real_name (str): Nom réel de l'objet utilisé par le cloud
+            statuses (list | None, optional): Liste des statuts de l'objet. Defaults to None.
+        """
+        self.id = id
+        self.name = name
+        self.class_name = class_name
+        self.real_name = real_name
+        self.statuses = statuses
+
+
 class CalypsHomeAPI:
     """Client API pour Calyps'HOME cloud"""
 
@@ -55,14 +74,14 @@ class CalypsHomeAPI:
             Dictionnaire avec les informations de l'objet ou `None` en cas d'erreur
         """
         try:
-            object = response["resource"]
-            return {
-                "id": object["id"],
-                "name": object["name"],
-                "class_name": object["className"],
-                "real_name": object["realName"],
-                "statuses": object.get("statuses", [])
-            }
+            objectData = response["resource"]
+            return CalypsHomeObject(
+                id=objectData["id"],
+                name=objectData["name"],
+                class_name=objectData["className"],
+                real_name=objectData["realName"],
+                statuses=objectData.get("statuses", [])
+            )
         except (ValueError, KeyError) as e:
             LOGGER.error("Erreur lors de l'extraction de l'objet depuis la réponse: %s", e)
             return None
@@ -198,7 +217,7 @@ class CalypsHomeAPI:
             response.raise_for_status()
             data = response.json()["content"]
             cover_data = [self._extract_object_from_response(obj) for obj in data]
-            return cover_data
+            return [obj for obj in cover_data if obj is not None]
         except requests.exceptions.RequestException as e:
             LOGGER.error("Erreur lors de la récupération des objets: %s", e)
             return None

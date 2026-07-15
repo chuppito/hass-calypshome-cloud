@@ -1,3 +1,4 @@
+import copy
 import logging
 from datetime import timedelta
 
@@ -6,13 +7,13 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
-from .api import CalypsHomeAPI
+from .api import CalypsHomeAPI, CalypsHomeObject
 from .const import DOMAIN, CONF_LOGIN, CONF_PASSWORD, PLATFORMS, UPDATE_INTERVAL
 
 LOGGER = logging.getLogger(__name__)
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Configurer Calyps'HOME à partir d'une entrée config"""
+    """Configure Calyps'HOME à partir d'une entrée config"""
 
     login = entry.data[CONF_LOGIN]
     password = entry.data[CONF_PASSWORD]
@@ -28,50 +29,34 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     coordinator = DataUpdateCoordinator(hass, LOGGER, name=f"{DOMAIN}_{entry.entry_id}", update_method=_async_update_data, update_interval=timedelta(minutes=UPDATE_INTERVAL))
 
-    async def on_ws_update(ws_update=None):
-        """Configure le callback websocket pour mettre à jour uniquement le volet concerné"""
-        # Récupération des données du mise à jour du websocket
-        if not ws_update:
-            return
-
-        real_name = ws_update.get("real_name")
-        level_value = ws_update.get("value")
-        if not real_name or level_value is None:
-            return
-
-        # Récupère les objets actuels du coordinateur
-        objects = coordinator.data
-        if not objects:
+    async def on_ws_update(ws_update=None) -> None:
+        """Callback appelé lorsqu'une mise à jour est reçue via le websocket"""
+        # Vérifie que la mise à jour contient les informations nécessaires
+        if not ws_update or not (real_name := ws_update.get("real_name")) or (level_value := ws_update.get("value")) is None or not coordinator.data:
             return
 
         updated = False
         next_objects = []
 
-        # Parcourt les objets pour trouver celui correspondant au real_name et mettre à jour son niveau
-        for obj in objects:
-            if obj.get("real_name") != real_name:
-                next_objects.append(obj)
-                continue
+        # Parcourt les objets existants pour trouver celui correspondant à la mise à jour
+        for obj in coordinator.data:
+            if obj.real_name == real_name:
+                obj: CalypsHomeObject = copy.copy(obj)
+                statuses = list(obj.statuses)
 
-            new_obj = dict(obj)
-            statuses = list(new_obj.get("statuses", []))
-            level_found = False
-
-            for status in statuses:
-                if isinstance(status, dict) and status.get("name") == "level":
+                # Met à jour le statut "level" si présent, sinon l'ajoute
+                if status := next((s for s in statuses if isinstance(s, dict) and s.get("name") == "level"), None):
+                    status = dict(status)
                     status["value"] = level_value
-                    level_found = True
-                    updated = True
-                    break
+                    statuses = [status if s.get("name") == "level" else s for s in statuses]
+                else:
+                    statuses = statuses + [{"name": "level", "value": level_value}]
 
-            if not level_found:
-                statuses.append({"name": "level", "value": level_value})
+                obj.statuses = statuses
                 updated = True
 
-            new_obj["statuses"] = statuses
-            next_objects.append(new_obj)
+            next_objects.append(obj)
 
-        # Si une mise à jour a été effectuée, met à jour les données du coordinateur
         if updated:
             coordinator.async_set_updated_data(next_objects)
 
