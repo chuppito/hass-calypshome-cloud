@@ -38,6 +38,7 @@ class CalypsHomeWebSocket:
         self._on_update = on_update
         self._ws_task = None
         self._ws_connected = False
+        self._loop: asyncio.AbstractEventLoop | None = None
         
     
     def _decode_ws_event_path(self, encoded_path: str) -> str | None:
@@ -146,7 +147,26 @@ class CalypsHomeWebSocket:
         if self._ws_task and not self._ws_task.done():
             return
 
+        self._loop = asyncio.get_running_loop()
+
         # Lancer la boucle d'écoute websocket
+        self._ws_task = asyncio.create_task(self._ws_listen_loop())
+
+
+    def restart_websocket_threadsafe(self) -> None:
+        """Redémarre le websocket en toute sécurité depuis n'importe quel thread."""
+        if not self._loop:
+            return
+
+        self._loop.call_soon_threadsafe(self._restart_websocket)
+
+
+    def _restart_websocket(self) -> None:
+        """Annule la tâche websocket courante et relance une nouvelle écoute."""
+        if self._ws_task and not self._ws_task.done():
+            self._ws_task.cancel()
+
+        self._ws_connected = False
         self._ws_task = asyncio.create_task(self._ws_listen_loop())
 
 

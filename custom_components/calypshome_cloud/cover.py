@@ -87,6 +87,9 @@ class CalypsHomeCover(CoordinatorEntity, CoverEntity):
     @property
     def is_closed(self):
         """Retourne si le volet est fermé"""
+        if self._attr_is_opening or self._attr_is_closing:
+            return False
+
         if self._attr_current_cover_position is not None:
             return self._attr_current_cover_position == 0
         return self._attr_is_closed
@@ -127,13 +130,11 @@ class CalypsHomeCover(CoordinatorEntity, CoverEntity):
                         if level_value is not None:
                             self._attr_current_cover_position = max(0, min(100, int(float(level_value))))
                             self._attr_is_closed = self._attr_current_cover_position == 0
-                            # Le websocket envoie le niveau quand le volet est arrêté
-                            self._reset_motion_state()
                     elif item.get("name") == "status":
                         status_name = str(item.get("value", "")).lower()
 
                 # Si le niveau n'est pas disponible, utilise le statut pour déterminer l'état
-                if self._attr_current_cover_position is None and status_name:
+                if self._attr_current_cover_position is None and status_name and self._target_position is None:
                     if status_name == "up":
                         self._attr_current_cover_position = 100
                         self._attr_is_closed = False
@@ -150,13 +151,10 @@ class CalypsHomeCover(CoordinatorEntity, CoverEntity):
 
                 # Fin de mouvement: à la réception du level final après une commande.
                 if self._target_position is not None and self._attr_current_cover_position is not None:
-                    reached_target = self._attr_current_cover_position == self._target_position
-                    moved_since_command = (
-                        self._motion_start_position is not None
-                        and self._attr_current_cover_position != self._motion_start_position
-                    )
+                    # Tolérance pour éviter de rester bloqué en mouvement sur de petits écarts.
+                    reached_target = abs(self._attr_current_cover_position - self._target_position) <= 1
 
-                    if reached_target or moved_since_command or self._motion_start_position is None:
+                    if reached_target:
                         self._reset_motion_state()
                     elif self._attr_current_cover_position < self._target_position:
                         self._attr_is_opening = True
@@ -215,8 +213,7 @@ class CalypsHomeCover(CoordinatorEntity, CoverEntity):
         """Arrête le volet"""
         success = await self.hass.async_add_executor_job(self._api.stop_shutter, self._device_id)
         if success:
-            self._target_position = None
-            self._motion_start_position = None
+            self._reset_motion_state()
             self.async_write_ha_state()
 
     async def async_set_cover_position(self, **kwargs: Any) -> None:

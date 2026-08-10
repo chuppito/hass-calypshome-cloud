@@ -2,6 +2,7 @@ import logging
 import urllib3
 import requests
 import threading
+import asyncio
 from collections.abc import Awaitable, Callable
 
 from .const import DEFAULT_CLOUD_URL
@@ -119,6 +120,9 @@ class CalypsHomeAPI:
             if not self.login():
                 return None
 
+            # Le websocket peut rester connecté avec l'ancien token: on force un redémarrage.
+            self._restart_websocket_after_relogin()
+
             try:
                 with self._request_lock:
                     response = self.session.request(method, url, timeout=10, **kwargs)
@@ -199,6 +203,18 @@ class CalypsHomeAPI:
             except requests.exceptions.RequestException as e:
                 LOGGER.error("Erreur lors de l'authentification auprès de l'API cloud: %s", e)
                 return False
+
+
+    def _restart_websocket_after_relogin(self) -> None:
+        """Redémarre le websocket après une réauthentification API réussie."""
+        if self._ws_client is None:
+            return
+
+        try:
+            self._ws_client.restart_websocket_threadsafe()
+            LOGGER.debug("Redémarrage websocket demandé après relogin API")
+        except Exception as e:
+            LOGGER.warning("Impossible de redémarrer le websocket après relogin: %s", e)
 
 
     def get_objects(self) -> list | None:
