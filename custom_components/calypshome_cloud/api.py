@@ -78,7 +78,7 @@ class CalypsHomeAPI:
             objectData = response["resource"]
             return CalypsHomeObject(
                 id=objectData["id"],
-                name=objectData["name"],
+                name=objectData.get("name") or objectData.get("realName", "Inconnu"),
                 class_name=objectData["className"],
                 real_name=objectData["realName"],
                 statuses=objectData.get("statuses", [])
