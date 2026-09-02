@@ -65,6 +65,7 @@ class CalypsHomeCover(CoordinatorEntity, CoverEntity):
             | CoverEntityFeature.SET_POSITION
         )
 
+        self._attr_is_closed = None
         self._reset_motion_state()
         self._target_position: int | None = None
         self._motion_start_position: int | None = None
